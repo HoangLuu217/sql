@@ -273,3 +273,72 @@ VALUES
 ('HD005', 'HH005', 2, 124000.00);
 
 
+CREATE TRIGGER trg_UpdateDiemTL
+ ON HoaDon
+AFTER INSERT
+AS
+BEGIN
+            UPDATE KhachHang
+        SET khachhang.DiemTL = khachhang.DiemTL + (i.TongTien * 0.0002)
+        FROM INSERTED i
+        WHERE KhachHang.KhID = i.KhID;
+END;
+
+CREATE TRIGGER trg_UpdateTongTienHD
+ON ChiTietBanHang
+AFTER INSERT 
+AS
+BEGIN
+    UPDATE HoaDon
+    SET TongTien = TongTien + i.ThanhTien
+    FROM INSERTED i
+    WHERE HoaDon.MaHD = i.MaHD;
+END;
+
+CREATE TRIGGER trg_CheckBanStatus
+ON DatBan
+AFTER INSERT, DELETE 
+AS
+BEGIN
+    -- Handle INSERT: Set TrangThai to 'ĐÃ ĐẶT'
+    IF EXISTS (SELECT 1 FROM INSERTED)
+    BEGIN
+        UPDATE Ban
+        SET TrangThai = 'ĐÃ ĐẶT'
+        FROM Ban b
+        INNER JOIN INSERTED i ON b.MaBan = i.MaBan;
+    END;
+
+    -- Handle DELETE: Set TrangThai to 'CHƯA ĐẶT'
+    IF EXISTS (SELECT 1 FROM DELETED)
+    BEGIN
+        UPDATE Ban
+        SET TrangThai = 'CHƯA ĐẶT'
+        FROM Ban b
+        INNER JOIN DELETED d ON b.MaBan = d.MaBan;
+    END;
+END;
+
+CREATE PROCEDURE fn_DeleteDatBan
+    @MaDatBan VARCHAR(10)
+AS
+BEGIN
+    BEGIN TRY
+        -- Check if the reservation exists
+        IF EXISTS (SELECT 1 FROM DatBan WHERE MaDatBan = @MaDatBan)
+        BEGIN
+            -- Delete the reservation
+            DELETE FROM DatBan WHERE MaDatBan = @MaDatBan;
+            PRINT 'Reservation deleted successfully.';
+        END
+        ELSE
+        BEGIN
+            PRINT 'Reservation not found.';
+        END
+    END TRY
+    BEGIN CATCH
+        -- Handle errors
+        PRINT 'Error occurred: ' + ERROR_MESSAGE();
+    END CATCH
+END;
+
