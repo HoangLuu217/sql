@@ -437,6 +437,11 @@ BEGIN
     WHERE HoaDonNhapHang.MaHDNH = inserted.MaHDNH;
 END;
 
+INSERT INTO ChiTietNhapHang (MaHDNH, MaSP, SoLuong, ThanhTien)
+VALUES ('HDNH001', 'SP001', 10, 50000);
+
+SELECT * FROM HoaDonNhapHang WHERE MaHDNH = 'HDNH001';
+
 --Tính tổng doanh thu trong một khoảng thời gian
 CREATE FUNCTION fn_TongDoanhThu (@startDate DATE, @endDate DATE)
 RETURNS NUMERIC(10,2)
@@ -449,3 +454,19 @@ BEGIN
     
     RETURN ISNULL(@TongDoanhThu, 0);
 END;
+
+--Kiểm tra số lượng hàng trong kho trước khi bán
+CREATE FUNCTION fn_KiemTraHangTrongKho (@MaSP VARCHAR(10), @SoLuong INT)
+RETURNS BIT
+AS
+BEGIN
+    DECLARE @KQ BIT;
+    IF EXISTS (SELECT 1 FROM SanPham WHERE MaSP = @MaSP AND SoLuong >= @SoLuong)
+        SET @KQ = 1;
+    ELSE
+        SET @KQ = 0;
+    RETURN @KQ;
+END;
+
+SELECT dbo.fn_KiemTraHangTrongKho('SP001', 5);
+
