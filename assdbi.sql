@@ -421,3 +421,31 @@ EXEC fn_DeleteDatBan @MaDatBan = 'DB001';
 -- Check if the DatBan is deleted
 SELECT * FROM DatBan WHERE MaDatBan = 'DB001';
 
+--Cập nhật tổng tiền của hóa đơn nhập hàng khi có thêm sản phẩm
+CREATE TRIGGER trg_UpdateTongTienHDNH
+ON ChiTietNhapHang
+AFTER INSERT, UPDATE, DELETE
+AS
+BEGIN
+    UPDATE HoaDonNhapHang
+    SET TongTien = (
+        SELECT SUM(ThanhTien) 
+        FROM ChiTietNhapHang 
+        WHERE MaHDNH = inserted.MaHDNH
+    )
+    FROM inserted
+    WHERE HoaDonNhapHang.MaHDNH = inserted.MaHDNH;
+END;
+
+--Tính tổng doanh thu trong một khoảng thời gian
+CREATE FUNCTION fn_TongDoanhThu (@startDate DATE, @endDate DATE)
+RETURNS NUMERIC(10,2)
+AS
+BEGIN
+    DECLARE @TongDoanhThu NUMERIC(10,2);
+    SELECT @TongDoanhThu = SUM(TongTien) 
+    FROM HoaDon
+    WHERE NgayHDBH BETWEEN @startDate AND @endDate;
+    
+    RETURN ISNULL(@TongDoanhThu, 0);
+END;
