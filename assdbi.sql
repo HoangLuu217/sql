@@ -319,15 +319,14 @@ BEGIN
     END;
 END;
 
+
 CREATE PROCEDURE fn_DeleteDatBan
     @MaDatBan VARCHAR(10)
 AS
 BEGIN
     BEGIN TRY
-        -- Check if the reservation exists
         IF EXISTS (SELECT 1 FROM DatBan WHERE MaDatBan = @MaDatBan)
         BEGIN
-            -- Delete the reservation
             DELETE FROM DatBan WHERE MaDatBan = @MaDatBan;
             PRINT 'Reservation deleted successfully.';
         END
@@ -337,7 +336,6 @@ BEGIN
         END
     END TRY
     BEGIN CATCH
-        -- Handle errors
         PRINT 'Error occurred: ' + ERROR_MESSAGE();
     END CATCH
 END;
