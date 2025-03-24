@@ -232,21 +232,21 @@ CREATE TABLE HoaDon (
     MaNV VARCHAR(10),
     MaBan VARCHAR(10),
     NgayHDBH DATE,
-    TongTien NUMERIC(8,2)check (TongTien > 0),
-    DiemTL INT check (DiemTL >= 0),
-    ChiPhiKhac NUMERIC(8,2) check (ChiPhiKhac > 0),
+    TongTien NUMERIC(8,2) CHECK (TongTien > 0),
+    ChiPhiKhac NUMERIC(8,2) CHECK (ChiPhiKhac > 0),
     FOREIGN KEY (KhID) REFERENCES KhachHang(KhID),
     FOREIGN KEY (MaNV) REFERENCES NhanVien(NvID),
     FOREIGN KEY (MaBan) REFERENCES Ban(MaBan)
 );
 
-INSERT INTO HoaDon (MaHD, KhID, MaNV, MaBan, NgayHDBH, TongTien, DiemTL, ChiPhiKhac)
+INSERT INTO HoaDon (MaHD, KhID, MaNV, MaBan, NgayHDBH, TongTien, ChiPhiKhac)
 VALUES 
-('HD001', 'KH001', 'NV01', 'B001', '2024-03-20', 500000, 50, 20000),
-('HD002', 'KH002', 'NV02', 'B002', '2024-03-21', 750000, 75, 25000),
-('HD003', 'KH003', 'NV03', 'B003', '2024-03-22', 620000, 62, 15000),
-('HD004', 'KH004', 'NV04', 'B004', '2024-03-23', 830000, 83, 30000),
-('HD005', 'KH005', 'NV05', 'B005', '2024-03-24', 910000, 91, 35000);
+('HD001', 'KH001', 'NV01', 'B001', '2024-03-20', 500000, 20000),
+('HD002', 'KH002', 'NV02', 'B002', '2024-03-21', 750000, 25000),
+('HD003', 'KH003', 'NV03', 'B003', '2024-03-22', 620000, 15000),
+('HD004', 'KH004', 'NV04', 'B004', '2024-03-23', 830000, 30000),
+('HD005', 'KH005', 'NV05', 'B005', '2024-03-24', 910000, 35000),
+('HD006', 'KH001', 'NV01', 'B001', '2025-03-24', 1000000, 50000);
 
 
 CREATE TABLE ChiTietBanHang (
@@ -274,14 +274,14 @@ VALUES
 
 
 CREATE TRIGGER trg_UpdateDiemTL
- ON HoaDon
+ON HoaDon
 AFTER INSERT
 AS
 BEGIN
-            UPDATE KhachHang
-        SET khachhang.DiemTL = khachhang.DiemTL + (i.TongTien * 0.0002)
-        FROM INSERTED i
-        WHERE KhachHang.KhID = i.KhID;
+    UPDATE KhachHang
+    SET KhachHang.DiemTL = KhachHang.DiemTL + (i.TongTien * 0.0002)
+    FROM INSERTED i
+    WHERE KhachHang.KhID = i.KhID;
 END;
 
 CREATE TRIGGER trg_UpdateTongTienHD
@@ -320,6 +320,36 @@ BEGIN
 END;
 
 
+CREATE TRIGGER trg_CheckInventoryBeforeSale
+ON ChiTietBanHang
+INSTEAD OF INSERT
+AS
+BEGIN
+    DECLARE @MaHH VARCHAR(10), @SoLuong INT;
+    IF EXISTS (
+        SELECT 1
+        FROM INSERTED i
+        JOIN HangHoa h ON i.MaHH = h.MaHH
+        WHERE i.SoLuong > (
+            SELECT ISNULL(SUM(SoLuong), 0) 
+            FROM ChiTietNhapHang 
+            WHERE MaHH = i.MaHH
+        ) - (
+            SELECT ISNULL(SUM(SoLuong), 0) 
+            FROM ChiTietBanHang 
+            WHERE MaHH = i.MaHH
+        )
+    )
+    BEGIN
+        PRINT 'Error: Not enough inventory for one or more items.';
+        ROLLBACK TRANSACTION;
+        RETURN;
+    END;
+    INSERT INTO ChiTietBanHang (MaHD, MaHH, SoLuong, ThanhTien)
+    SELECT MaHD, MaHH, SoLuong, ThanhTien
+    FROM INSERTED;
+END;
+
 CREATE PROCEDURE fn_DeleteDatBan
     @MaDatBan VARCHAR(10)
 AS
@@ -339,4 +369,55 @@ BEGIN
         PRINT 'Error occurred: ' + ERROR_MESSAGE();
     END CATCH
 END;
+
+-- Test for trg_UpdateDiemTL
+-- Insert a new HoaDon
+INSERT INTO HoaDon (MaHD, KhID, MaNV, MaBan, NgayHDBH, TongTien, DiemTL, ChiPhiKhac)
+VALUES ('HD006', 'KH001', 'NV01', 'B001', '2025-03-24', 1000000, 0, 50000);
+
+-- Check if DiemTL of KH001 is updated
+SELECT KhID, DiemTL FROM KhachHang WHERE KhID = 'KH001';
+
+-- Test for trg_UpdateTongTienHD
+-- Insert a new ChiTietBanHang
+INSERT INTO ChiTietBanHang (MaHD, MaHH, SoLuong, ThanhTien)
+VALUES ('HD001', 'HH003', 2, 40000);
+
+-- Check if TongTien of HD001 is updated
+SELECT MaHD, TongTien FROM HoaDon WHERE MaHD = 'HD001';
+
+-- Test for trg_CheckBanStatus (INSERT)
+-- Insert a new DatBan
+INSERT INTO DatBan (MaDatBan, KhID, MaBan, NgayDat)
+VALUES ('DB006', 'KH002', 'B003', '2025-03-25 18:00:00');
+
+-- Check if TrangThai of B003 is updated to 'ĐÃ ĐẶT'
+SELECT MaBan, TrangThai FROM Ban WHERE MaBan = 'B003';
+
+-- Test for trg_CheckBanStatus (DELETE)
+-- Delete the DatBan
+DELETE FROM DatBan WHERE MaDatBan = 'DB006';
+
+-- Check if TrangThai of B003 is updated to 'CHƯA ĐẶT'
+SELECT MaBan, TrangThai FROM Ban WHERE MaBan = 'B003';
+
+-- Test for trg_CheckInventoryBeforeSale (Sufficient Inventory)
+INSERT INTO ChiTietBanHang (MaHD, MaHH, SoLuong, ThanhTien)
+VALUES ('HD002', 'HH001', 5, 125000);
+
+-- Check if the row is inserted
+SELECT * FROM ChiTietBanHang WHERE MaHD = 'HD002' AND MaHH = 'HH001';
+
+-- Test for trg_CheckInventoryBeforeSale (Insufficient Inventory)
+INSERT INTO ChiTietBanHang (MaHD, MaHH, SoLuong, ThanhTien)
+VALUES ('HD002', 'HH001', 1000, 25000000);
+
+-- Check if the row is not inserted
+SELECT * FROM ChiTietBanHang WHERE MaHD = 'HD002' AND MaHH = 'HH001';
+
+-- Test for fn_DeleteDatBan (Successful Deletion)
+EXEC fn_DeleteDatBan @MaDatBan = 'DB001';
+
+-- Check if the DatBan is deleted
+SELECT * FROM DatBan WHERE MaDatBan = 'DB001';
 
